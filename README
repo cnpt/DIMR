@@ -1,0 +1,4 @@
+This project contains three parts:
+1. The original SimBGP is extended to include the implementation of DIMR Router and PDAR Router.
+2. A bash script is provided to automatically run the experiment.
+3. Some awk or python scripts are provided to show the statistics of the data.
