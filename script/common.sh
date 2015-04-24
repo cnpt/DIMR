@@ -10,6 +10,7 @@ BASE_DIR="../"
 DATA_DIR=$BASE_DIR"data/"
 SRC_DIR=$BASE_DIR"src/"
 SHELL_DIR=$BASE_DIR"script/"
+ASTOPO_FILE="20150201.as-rel.txt"
 
 log_debug() { current=`date "+%b %d %T"`; echo -e "[$current] $1"; }
 clean_dir() { if [ -e $1 ]; then rm -rf $1; fi; mkdir -p $1; }
