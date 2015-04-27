@@ -429,7 +429,7 @@ class CRouter:
         return [change, trend];
 
     # 
-    # called when EVENT_UPDATE msg is processed
+    # called when EVENT_RECEIVE msg is processed
     # called on a specific peer and specific prefix
     #
     def receive(self, pid, update):
@@ -612,6 +612,7 @@ class CRouter:
         #print self, "enqueue", pid, prefix;
         #Compute send time
         next_mrai = self.mraiExpires(pid, prefix);
+        # if always_mrai is enabled
         if next_mrai < 0 and always_mrai:
             if self.mrai_setting == MRAI_PEER_BASED:
                 tprefix = None;
@@ -620,6 +621,7 @@ class CRouter:
                 _event_Scheduler.add(CEvent(next_mrai, [self.id, pid, tprefix], EVENT_MRAI_EXPIRE_SENDTO));
             #print "Add EVENT_MRAI_EXPIRE_SENDTO ", str(self), pid, tprefix, next_mrai;
         #print str(self), str(pid), str(prefix), next_mrai, wrate, self.isWithdrawal(pid, prefix);
+        # if withdraw-rate-limiting is not enabled, the withdrawals can send immediately
         if next_mrai < 0 or ((not wrate) and self.isWithdrawal(pid, prefix)):
             #print "MRAI expires, send imediately ...", pid;
             self.sendto(pid, prefix);
@@ -667,6 +669,7 @@ class CRouter:
                     break;
                 else: #Skip, prefix is not the one that was specified
                     i = i + 1;
+        # If some things were sent, reset the MARI
         if sendsth:
             if SHOW_SEND_EVENTS:
                 print getSystemTimeStr(), self, "sendto", pid, prefix;
@@ -1272,10 +1275,12 @@ class CPath:
         return 4 + 4 + 4 + 4 + 4*len(self.community) + 2*len(self.aspath);
 
     #
-    # Compare two paths for strict equivalence
+    # Compare two paths for preference.
+    # This function is used for sorting, so it contains the tie-breaking rules.
     #
     def compareTo(self, path2): # the lower is the superior
         global bgp_always_compare_med;
+        # this metric is not used in PDAR and DIMR
         #if self.index != path2.index:
         #   return sgn(self.index - path2.index);
         #if self.type != path2.type:
@@ -1969,9 +1974,9 @@ def readConfig(filename):
     try:
         f = open(filename, "r");
         cmd = readnextcmd(f);
-        curRT = None;
-        curNB = None;
-        curMap = None;
+        curRT = None; # current Router
+        curNB = None; # current Neighbor(Peer)
+        curMap = None; # current RouteMap
         while len(cmd) > 0:
             #print cmd;
             if cmd[0] == "router" and cmd[1] == "bgp":
