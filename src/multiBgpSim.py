@@ -1283,7 +1283,7 @@ class CBGPXMRouter(CRouter):
                 #print "The new path is ", newpath;
             self.merged_rib[prefix] = [newpath];
         else:
-            self.merged_rib = self.loc_rib;
+            self.merged_rib[prefix] = inpaths;
         # print self
         # print "------------->";
         # for path in inpaths:
@@ -1389,7 +1389,7 @@ class CPath:
         result = self.compareTo(path2);
         if result != 0:
             return result;
-        print self,"compareTo2", path2, self.aspath == path2.aspath
+        # print self,"compareTo2", path2, self.aspath == path2.aspath
         if self.aspath != path2.aspath:
             result = 1
         if result != 0:
@@ -1402,7 +1402,7 @@ class CPath:
         result = self.compareTo(path2);
         if result != 0:
             return result;
-        print self,"compareTo3", path2
+        # print self,"compareTo3", path2
         if self.aspath != path2.aspath:
             result = 1
         if result != 0:
