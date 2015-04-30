@@ -816,6 +816,7 @@ class CRouter:
         elif rbgp_routing:
             # if len(self.loc_rib[prefix]) > 0:
                 # print "rbgp_routing", str(self.loc_rib[prefix][0])
+            path = None;
             if len(self.loc_rib[prefix]) > 1 and self.loc_rib[prefix][0].src_pid == pid:
                 path = self.loc_rib[prefix][1];
             elif len(self.loc_rib[prefix]) > 0:
