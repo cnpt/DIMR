@@ -26,6 +26,7 @@ default_local_preference = 100;
 disjoint_multipath_routing = False;
 path_diversity_aware_routing = False;
 bgp_xm_routing = False;
+rbgp_routing = False;
 
 default_weight = 1000;
 default_backup_weight_internal = 0;
@@ -35,9 +36,9 @@ default_backup_weight_external = 20;
 backup_routing = False;
 backup_route_as_withdrawal = False;
 
-ALTERNATIVE_NONE = 0;
-ALTERNATIVE_EXIST = 1;
-ALTERNATIVE_BACKUP = 2;
+ALTERNATIVE_NONE = 0; # no alternative path 
+ALTERNATIVE_EXIST = 1; # there are additional alternative path
+ALTERNATIVE_BACKUP = 2; # this path is an alternative one
 
 RANDOMIZED_KEY = "";
 
@@ -483,6 +484,7 @@ class CRouter:
         for path in update.paths:
             if self.importFilter(pid, update.prefix, path):
                 tmppaths.append(self.importAction(pid, update.prefix, path));
+        # if no path were imported but alternative path exist
         if backup_routing and len(tmppaths) == 0 and len(update.paths) > 0 and update.paths[0].alternative == ALTERNATIVE_EXIST:
             alterpath = CPath();
             alterpath.local_pref = default_local_preference;
@@ -490,6 +492,7 @@ class CRouter:
             alterpath.src_pid = pid;
             alterpath.alternative = ALTERNATIVE_BACKUP;
             alterpath.index = 0;
+            # the alternative path don't have AS_PATH attribute
             tmppaths.append(self.importAction(pid, update.prefix, alterpath));
         # this peer's rib_in is updated
         self.peers[pid].rib_in[update.prefix] = tmppaths;
@@ -601,7 +604,12 @@ class CRouter:
             if CHECK_LOOP:
                 forwardingCheck(self, prefix);
         else:
+            #
             #print str(self) + " have no path change for " + prefix;
+            # when backup_routing, if the backup CPath were not removed
+            # only the most preferred CPath are changed
+            # then it is marked as unchanged
+            #
             if backup_routing and len(self.loc_rib[prefix]) > 0 and self.loc_rib[prefix][0].alternative != ALTERNATIVE_BACKUP:
                 #send_some = False;
                 for pid in self.peers.keys():
@@ -795,7 +803,7 @@ class CRouter:
     # Build update to send to peer pid for this prefix
     #
     def sendtopeer(self, pid, prefix):
-        global _event_Scheduler, backup_routing, bgp_xm_routing, ALTERNATIVE_BACKUP, ALTERNATIVE_EXIST, MAX_PATH_NUMBER;
+        global _event_Scheduler, backup_routing, bgp_xm_routing, rbgp_routing, ALTERNATIVE_BACKUP, ALTERNATIVE_EXIST, MAX_PATH_NUMBER;
         update = CUpdate(prefix);
         i = 0;
         if bgp_xm_routing:
@@ -808,6 +816,18 @@ class CRouter:
                     npath.index = i;
                     update.paths.append(npath);
                 i = i + 1;
+        elif rbgp_routing:
+            # if len(self.loc_rib[prefix]) > 0:
+                # print "rbgp_routing", str(self.loc_rib[prefix][0])
+            if len(self.loc_rib[prefix]) > 1 and self.loc_rib[prefix][0].src_pid == pid:
+                path = self.loc_rib[prefix][1];
+            elif len(self.loc_rib[prefix]) > 0:
+                path = self.loc_rib[prefix][0];
+            if path != None:
+                if self.exportFilter(pid, prefix, path):
+                    npath = self.exportAction(pid, prefix, path);
+                    npath.index = 0;
+                    update.paths.append(npath);
         else:
             #It seems that more than one path is sent to peer
             while i < len(self.loc_rib[prefix]):
@@ -883,7 +903,11 @@ class CPDARRouter(CRouter):
                 match = match + 1
         return match
     
-    def pathSelectAlternative(self, paths):
+    #
+    # Select the alternative path, which is the most disjoint one with the primary
+    # After the selection, the alternative path is moved to the second position.
+    #
+    def pathSelectAlternative(self, paths, prefix):
         if len(paths) < 2:
             return
         bestDisjointness = INFINITE
@@ -938,7 +962,7 @@ class CPDARRouter(CRouter):
         #Create locrib entry if it does not exist
         if not self.loc_rib.has_key(prefix):
             self.loc_rib[prefix] = [];
-        self.pathSelectAlternative(inpaths);
+        self.pathSelectAlternative(inpaths, prefix);
         # print str(self.id)
         # if len(inpaths) > 0:
         #     print str(inpaths[0].aspath)
@@ -1284,11 +1308,34 @@ class CBGPXMRouter(CRouter):
             self.merged_rib[prefix] = [newpath];
         else:
             self.merged_rib[prefix] = inpaths;
-        # print self
-        # print "------------->";
-        # for path in inpaths:
-            # print path
-        # print "<-------------";
+
+############################################################################################################################
+#                                     Class CRBGPRouter - Represents a R-BGP router
+############################################################################################################################
+
+class CRBGPRouter(CPDARRouter):
+    def __init__(self, a, i):
+        CPDARRouter.__init__(self, a, i);
+    
+    #
+    # Select the policy-compliant one who is most disjoint with the primary one
+    #
+    def pathSelectAlternative(self, paths, prefix):
+        if len(paths) < 2:
+            return
+        bestDisjointness = INFINITE
+        besti = 1
+        i=1
+        while i < len(paths):
+            tmpDisjointness = self.disjointness(paths[0].aspath, paths[i].aspath)
+            if tmpDisjointness < bestDisjointness and self.exportFilter(paths[0].src_pid, prefix, paths[i]):
+                besti = i
+                bestDisjointness = tmpDisjointness
+            i = i + 1
+        if besti is not 1:
+            tmpPath = paths[1]
+            paths[1] = paths[besti]
+            paths[besti] = tmpPath
 
 
 ############################################################################################################################
@@ -2047,7 +2094,7 @@ def interpretDelay(param):
     return tmparray;
 
 def readConfig(filename):
-    global SHOW_UPDATE_RIBS, SHOW_RECEIVE_EVENTS, SHOW_FINAL_RIBS, path_diversity_aware_routing, disjoint_multipath_routing, bgp_xm_routing, wrate, always_mrai, ssld, bgp_always_compare_med, MRAI_JITTER, MAX_PATH_NUMBER, backup_routing, CHECK_LOOP, backup_route_as_withdrawal, SHOW_DEBUG, RANDOMIZED_KEY, GHOST_BUSTER, GHOST_FLUSHING, SHOW_SEND_EVENTS, default_link_delay_func, default_process_delay_func, _link_delay_table, EPIC;
+    global SHOW_UPDATE_RIBS, SHOW_RECEIVE_EVENTS, SHOW_FINAL_RIBS, path_diversity_aware_routing, disjoint_multipath_routing, bgp_xm_routing, rbgp_routing, wrate, always_mrai, ssld, bgp_always_compare_med, MRAI_JITTER, MAX_PATH_NUMBER, backup_routing, CHECK_LOOP, backup_route_as_withdrawal, SHOW_DEBUG, RANDOMIZED_KEY, GHOST_BUSTER, GHOST_FLUSHING, SHOW_SEND_EVENTS, default_link_delay_func, default_process_delay_func, _link_delay_table, EPIC;
     try:
         f = open(filename, "r");
         cmd = readnextcmd(f);
@@ -2067,6 +2114,8 @@ def readConfig(filename):
                         curRT = CPDARRouter(asn, id);
                     elif bgp_xm_routing:
                         curRT = CBGPXMRouter(asn, id);
+                    elif rbgp_routing:
+                        curRT = CRBGPRouter(asn, id);
                     else:
                         curRT = CRouter(asn, id);
                     _router_list[id] = curRT;
@@ -2210,6 +2259,9 @@ def readConfig(filename):
                     MAX_PATH_NUMBER = 2
                     disjoint_multipath_routing = False
                     bgp_xm_routing = False
+                elif cmd[1] == "rbgp-routing":
+                    rbgp_routing = True
+                    MAX_PATH_NUMBER = 2
                 elif cmd[1] == "bgpxm-routing":
                     bgp_xm_routing = True
                     MAX_PATH_NUMBER = 5
