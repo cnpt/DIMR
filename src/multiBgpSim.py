@@ -27,6 +27,7 @@ disjoint_multipath_routing = False;
 path_diversity_aware_routing = False;
 bgp_xm_routing = False;
 rbgp_routing = False;
+yamr_routing = False;
 
 default_weight = 1000;
 default_backup_weight_internal = 0;
@@ -373,6 +374,7 @@ class CRouter:
             inpaths.append(self.origin_rib[prefix]);
         else:
             #Getting paths from peers adjribins.  There can be more than one path per peer (multipath)
+            #Since rib_ins are lists of objects, rib_ins still hold reference to their paths
             for peer in self.peers.values():
                 if peer.rib_in.has_key(prefix):
                     for path in  peer.rib_in[prefix]:
@@ -1262,6 +1264,57 @@ class CRBGPRouter(CPDARRouter):
 
 
 ############################################################################################################################
+#                                     Class CYAMRRouter - Represents a YAMR router
+############################################################################################################################
+
+class CYAMRRouter(CRouter):
+
+    def __init__(self, a, i):
+        CRouter.__init__(self, a, i);
+
+    def avoidASLink(self, path, link):
+        # print "avoidASLink",self.asn, str(path), str(link)
+        if path.avoid_link is not None and path.avoid_link == link:
+            return True;
+        else:
+            i = 0;
+            prev = self.asn;
+            while i < len(path.aspath):
+                if link == CASLink(prev, path.aspath[i]):
+                    return False
+                prev = path.aspath[i]
+                i = i + 1
+            return True
+            
+
+    def selectPaths(self, prefix):
+        incomingpaths = CRouter.selectPaths(self, prefix);
+        inpaths = []
+        if len(incomingpaths) > 0:
+            inpaths.append(incomingpaths[0]);
+            incomingpaths.pop(0);
+            inpaths[0].avoid_link = None;
+            i = 0;
+            prev = self.asn;     
+            while i < len(inpaths[0].aspath):
+                link = CASLink(prev, inpaths[0].aspath[i]);
+                # print "current AS:", self.asn, str(inpaths[0]), "creating link", str(link)
+                j = 0;
+                while j < len(incomingpaths):
+                    if self.avoidASLink(incomingpaths[j], link):
+                        incomingpaths[j].avoid_link = link;
+                        inpaths.append(incomingpaths[j]);
+                        incomingpaths.pop(j);
+                        break;
+                    j = j + 1
+                prev = inpaths[0].aspath[i];
+                i = i + 1
+        # inpaths.sort(self.comparePath);
+        return inpaths
+
+
+
+############################################################################################################################
 #                                     Class CUpdate - Represents a BGP update
 ############################################################################################################################
 # Only one prefix, but multipath is supported
@@ -1293,6 +1346,35 @@ class CUpdate:
             sz = sz + p.size();
         return sz;
 
+############################################################################################################################
+#                               Class CASLink - Represents an AS-level Link used by YAMR
+############################################################################################################################
+class CASLink:
+    start = 0; # AS Number
+    end = 0; # AS number
+
+    def __str__(self):
+        return "(" + str(self.start) + "," + str(self.end) + ")";
+
+    def __init__(self, s, e):
+        if s < e:
+            self.start = s;
+            self.end = e;
+        else:
+            self.start = e;
+            self.end = s;
+        
+    def __eq__(self, other):
+        return self.start == other.start and self.end == other.end;
+        
+    def copy(self):
+        return CASLink(self.start, self.end);
+        
+
+
+############################################################################################################################
+#                               Class CPath - Represents a Path towards the owner of a prefix
+############################################################################################################################
 class CPath:
     index = None; # for single path routing, index=0; multipath routing, index=0,1,2,...
     src_pid = None;
@@ -1307,6 +1389,8 @@ class CPath:
     igp_cost = None;
     aspath = None;
     fesnpath = None;
+    # used by YAMR routing
+    avoid_link = None;
 
     def __init__(self):
         global default_local_preference, default_weight, ALTERNATIVE_NONE;
@@ -1380,7 +1464,7 @@ class CPath:
         return self.alternative - path2.alternative;
 
     def copy(self, p2):
-        global EPIC,bgp_xm_routing;
+        global EPIC, bgp_xm_routing, yamr_routing;
         self.index = p2.index;
         self.src_pid = p2.src_pid;
         #self.type = p2.type;
@@ -1394,7 +1478,9 @@ class CPath:
         self.aspath = [];
         self.aspath.extend(p2.aspath);
         if bgp_xm_routing and len(p2.aspath) >0 and isinstance(p2.aspath[-1],set):
-           self.aspath[-1] = p2.aspath[-1].copy(); 
+            self.aspath[-1] = p2.aspath[-1].copy(); 
+        if yamr_routing and p2.avoid_link is not None:
+            self.avoid_link = p2.avoid_link.copy();
         self.alternative = p2.alternative;
         if EPIC:
             if p2.fesnpath is not None:
@@ -1402,7 +1488,11 @@ class CPath:
                 self.fesnpath.extend(p2.fesnpath);
 
     def __str__(self):
-        tmpstr = str(self.index) + "F" + str(self.src_pid) + "L" + str(self.local_pref) + str(self.aspath) + "M" + str(self.med) + "N" + str(self.nexthop) + "C" + str(self.igp_cost) + str(self.community) + "W" + str(self.weight) + "A" + str(self.alternative);
+        global yamr_routing;
+        tmpstr = str(self.index) + "F" + str(self.src_pid) + "L" + str(self.local_pref);
+        if yamr_routing and self.avoid_link is not None:
+            tmpstr = tmpstr + str(self.avoid_link) + ":"
+        tmpstr = tmpstr + str(self.aspath) + "M" + str(self.med) + "N" + str(self.nexthop) + "C" + str(self.igp_cost) + str(self.community) + "W" + str(self.weight) + "A" + str(self.alternative);
         if EPIC and self.fesnpath is not None:
             tmpstr = tmpstr + str(self.fesnpath);
         return tmpstr;
@@ -2017,7 +2107,7 @@ def interpretDelay(param):
     return tmparray;
 
 def readConfig(filename):
-    global SHOW_UPDATE_RIBS, SHOW_RECEIVE_EVENTS, SHOW_FINAL_RIBS, path_diversity_aware_routing, disjoint_multipath_routing, bgp_xm_routing, rbgp_routing, wrate, always_mrai, ssld, bgp_always_compare_med, MRAI_JITTER, MAX_PATH_NUMBER, backup_routing, CHECK_LOOP, backup_route_as_withdrawal, SHOW_DEBUG, RANDOMIZED_KEY, GHOST_BUSTER, GHOST_FLUSHING, SHOW_SEND_EVENTS, default_link_delay_func, default_process_delay_func, _link_delay_table, EPIC;
+    global SHOW_UPDATE_RIBS, SHOW_RECEIVE_EVENTS, SHOW_FINAL_RIBS, path_diversity_aware_routing, disjoint_multipath_routing, bgp_xm_routing, rbgp_routing, yamr_routing, wrate, always_mrai, ssld, bgp_always_compare_med, MRAI_JITTER, MAX_PATH_NUMBER, backup_routing, CHECK_LOOP, backup_route_as_withdrawal, SHOW_DEBUG, RANDOMIZED_KEY, GHOST_BUSTER, GHOST_FLUSHING, SHOW_SEND_EVENTS, default_link_delay_func, default_process_delay_func, _link_delay_table, EPIC;
     try:
         f = open(filename, "r");
         cmd = readnextcmd(f);
@@ -2039,6 +2129,8 @@ def readConfig(filename):
                         curRT = CBGPXMRouter(asn, id);
                     elif rbgp_routing:
                         curRT = CRBGPRouter(asn, id);
+                    elif yamr_routing:
+                        curRT = CYAMRRouter(asn, id);
                     else:
                         curRT = CRouter(asn, id);
                     _router_list[id] = curRT;
@@ -2175,21 +2267,18 @@ def readConfig(filename):
                 elif cmd[1] == "disjoint-multipath-routing":
                     disjoint_multipath_routing = True
                     MAX_PATH_NUMBER = 2
-                    path_diversity_aware_routing = False
-                    bgp_xm_routing = False
                 elif cmd[1] == "path-diversity-aware-routing":
                     path_diversity_aware_routing = True
                     MAX_PATH_NUMBER = 2
-                    disjoint_multipath_routing = False
-                    bgp_xm_routing = False
                 elif cmd[1] == "rbgp-routing":
                     rbgp_routing = True
                     MAX_PATH_NUMBER = 2
+                elif cmd[1] == "yamr-routing":
+                    yamr_routing = True
+                    MAX_PATH_NUMBER = INFINITE
                 elif cmd[1] == "bgpxm-routing":
                     bgp_xm_routing = True
                     MAX_PATH_NUMBER = 5
-                    path_diversity_aware_routing = False
-                    disjoint_multipath_routing = False
                 else:
                     print "unknown config option", cmd[1], "in", cmd;
                     sys.exit(-1);
@@ -2207,7 +2296,7 @@ _event_Scheduler = COrderedList();
 
 
 if len(sys.argv) < 2:
-    print "Usage: bgpSimfull.py configfile\n";
+    print "Usage: multiBgpSim.py configfile\n";
     sys.exit(-1);
 
 
