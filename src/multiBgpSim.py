@@ -1274,8 +1274,11 @@ class CYAMRRouter(CRouter):
 
     def avoidASLink(self, path, link):
         # print "avoidASLink",self.asn, str(path), str(link)
-        if path.avoid_link is not None and path.avoid_link == link:
-            return True;
+        if path.avoid_link is not None:
+            if path.avoid_link == link:
+                return True;
+            else:
+                return False;
         else:
             i = 0;
             prev = self.asn;
