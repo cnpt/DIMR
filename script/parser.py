@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 import re
 import sys
+import getopt
 
-ases = {} # a dictionary of ASes, AS number as the key
+ases = {}; # a dictionary of ASes, AS number as the key
+show_each_AS = False;
+show_paths = False;
 
 class AS:
     number = None;
@@ -11,6 +14,8 @@ class AS:
     bottelneck = None;
     hasDisjoint = None;
     disjointPaths = None;
+    numberOfPaths = None;
+    averagePathLength = None;
 
     def __init__(self, num):
         # print "AS created",num
@@ -19,9 +24,15 @@ class AS:
         self.paths = [];
         self.bottelneck = set([]);
         #self.hasDisjoint = False;
+        self.numberOfPaths = 0;
+        self.averagePathLength = 0.0;
         
     def __str__(self):
         tmp = str(self.number) + " " + str(self.hasDisjoint) + " " + str(self.disjointPaths);
+        if show_each_AS:
+            tmp += " " + str(self.averagePathLength);
+        if show_paths:
+            tmp += " " + str(self.paths);
         # tmp = str(self.number) + str(self.paths) + str(self.bottelneck) + str(self.hasDisjoint);
         return tmp
 
@@ -101,6 +112,8 @@ class AS:
                     npath.extend(tmp);
                     self.paths.append(npath);
             else:
+                self.numberOfPaths += 1;
+                self.averagePathLength += len(path);
                 if i == 0:
                     self.bottelneck = set(path);
                     self.bottelneck.remove(path[-1])
@@ -112,39 +125,69 @@ class AS:
         if len(self.bottelneck) or len(self.paths) < 2:
             self.hasDisjoint = False;
         self.findDisjoint();
+        if self.numberOfPaths != 0:
+            self.averagePathLength /= self.numberOfPaths;
         self.visited = True
 
+def show():
+    global ases;
+    cnt = 0;
+    numberOfASes = 0;
+    averageLength = 0;
+    for key in ases:
+        numberOfASes += 1;
+        averageLength += ases[key].averagePathLength;
+        if ases[key].hasDisjoint:
+            cnt += 1;
+        # print str(ases[key])
+    averageLength /= numberOfASes; 
+    print cnt;
+    print averageLength;
+    if show_each_AS:
+        print "show AS"
+        for each_AS in ases:
+            print str(ases[each_AS]);
+    if show_paths:
+        print "show paths"
 
-
-
-# filename='filtered_ribs'
-filename='ribs'
-ribs=None;
-
-if len(sys.argv) > 1:
-    filename = sys.argv[1];
-    ribs=open(filename).read().split('\n')
-else:
-    ribs=sys.stdin.read().split('\n')
-
-if len(ribs[-1])==0:
-    ribs.pop(-1);
-for line in ribs:
-    tokens = line.split('|');
-    name = eval(tokens[0]);
-    ases[name] = AS(name);
-    i = 1;
-    while i < len(tokens):
-        ases[name].paths.append(eval(tokens[i]));
-        i = i + 1;
-
-for key in ases:
-    ases[key].visit();
+def main():
+    global ases, show_each_AS, show_paths;
+    ribs=None;
     
-cnt = 0;
-for key in ases:
-    if ases[key].hasDisjoint:
-        cnt += 1
-    # print str(ases[key])
-print cnt
+    try:
+        options,args = getopt.getopt(sys.argv[1:],"dp",[])
+    except getopt.GetoptError:
+        sys.exit()
 
+    for name,value in options:
+        if name in ("-d"):
+            show_each_AS = True;
+            # print "debug"
+        if name in ("-p"):
+            show_paths = True;
+            # print "show paths"
+
+    if len(args) > 0:
+        ribs=open(args[0]).read().split('\n')
+    else:
+        ribs=sys.stdin.read().split('\n')
+
+    if len(ribs[-1])==0:
+        ribs.pop(-1);
+    for line in ribs:
+        tokens = line.split('|');
+        name = eval(tokens[0]);
+        ases[name] = AS(name);
+        i = 1;
+        while i < len(tokens):
+            ases[name].paths.append(eval(tokens[i]));
+            i = i + 1;
+
+    for key in ases:
+        ases[key].visit();
+        
+    show();
+
+
+if __name__ == "__main__":
+    main()
