@@ -4,7 +4,7 @@ import sys
 import getopt
 
 protocols = ['dimr', 'pdar', 'bgpxm', 'rbgp', 'yamr'];
-numbers = ['%03d' %(i+1) for i in range(100)] 
+numbers = ['%03d' %(i+1) for i in range(100)]
 BASEDIR='~/DIMR/'
 DATADIR='data/'
 SHELLDIR='script/'
@@ -12,6 +12,8 @@ SRCDIR='src/'
 
 FILE_DISJOINT = 'result_disjoint'
 FILE_AVERAGE = 'result_average_length'
+FILE_CONVERGE = 'result_converge'
+FILE_UPDATE = 'result_update'
 
 # print numbers
 
@@ -30,11 +32,40 @@ def calcDisjoint():
         pcmd = 'echo ' + average_length + ' >> ' + BASEDIR + DATADIR + FILE_AVERAGE
         os.system(pcmd)
 
+def calcEvents():
+    for index in numbers:
+        converge_time = None;
+        updates = None;
+        for proto in protocols:
+            cmd = BASEDIR + SHELLDIR + 'convergeTime.awk ' + BASEDIR + DATADIR + 'msg_' + proto + '_epic' + index;
+            # print cmd
+            outcome = os.popen(cmd).readlines()
+            if converge_time is None:
+                converge_time = [[None, ' '] for i in range(len(outcome))];
+                updates = [[None, ' '] for i in range(len(outcome))];
+            for i in range(len(outcome)):
+                data = outcome[i][:-1].split(' ');
+                converge_time[i][0] = data[0];
+                converge_time[i][1] += data[1] + ' ';
+                updates[i][0] = data[0];
+                updates[i][1] += data[2] + ' ';
+            # print converge_time;
+            # print updates;
+        for line in converge_time:
+            pcmd = 'echo ' + line[1] + ' >> ' + BASEDIR + DATADIR + FILE_CONVERGE + '_' + line[0];
+            # print pcmd;
+            os.system(pcmd)
+        for line in updates:
+            pcmd = 'echo ' + line[1] + ' >> ' + BASEDIR + DATADIR + FILE_UPDATE + '_' + line[0];
+            # print pcmd;
+            os.system(pcmd)
+
 
 def main():
     calc_disjoint = False;
+    calc_converge = False;
     try:
-        options,args = getopt.getopt(sys.argv[1:],"dp",[])
+        options,args = getopt.getopt(sys.argv[1:],"dc",[])
     except getopt.GetoptError:
         sys.exit()
 
@@ -42,14 +73,13 @@ def main():
         if name in ("-d"):
             calc_disjoint = True;
             # print "debug"
-        if name in ("-p"):
-            print "no implementation"
+        if name in ("-c"):
+            calc_converge = True;
             # print "show paths"
     if calc_disjoint:
-        calcDisjoint()
-    # cmd='~/DIMR/src/multiBgpSim.py ~/DIMR/data/conf_yamr | ~/DIMR/script/filter.awk | ~/DIMR/script/parser.py'
-    # outcome = os.popen(cmd).readlines()
-    # print outcome
+        calcDisjoint();
+    if calc_converge:
+        calcEvents();
 
 
 if __name__ == "__main__":
