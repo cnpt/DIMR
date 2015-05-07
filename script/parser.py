@@ -36,6 +36,19 @@ class AS:
         # tmp = str(self.number) + str(self.paths) + str(self.bottelneck) + str(self.hasDisjoint);
         return tmp
 
+    def shortCut(self, paths):
+        i = 0;
+        j = len(paths)-1;
+        while i<j:
+            if paths[i].disjoint(paths[j]):
+                self.hasDisjoint = True;
+                self.disjointPaths = [self.paths[i], self.paths[j]];
+                return True;
+            i += 1;
+            j -= 1;
+        self.hasDisjoint = False;
+        return False;
+
     def findDisjoint(self):
         if self.hasDisjoint == False:
             return
@@ -49,6 +62,9 @@ class AS:
         allowedPathIdSets = {}; # key is the asn, value is the set of PathIds of who don't contain that asn
         for path in self.paths:
             allPaths.append(set(path[:-1]));
+        
+        if self.numberOfPaths >= 10000:
+            return self.shortCut(allPaths);
         # fullPathIdSet = set(range(len(pathList)));
         # initialize the allowedPathIdSets
         for pathId in range(len(allPaths)):
@@ -124,6 +140,7 @@ class AS:
                 i = i + 1;
         if len(self.bottelneck) or len(self.paths) < 2:
             self.hasDisjoint = False;
+        # print self.numberOfPaths;
         self.findDisjoint();
         if self.numberOfPaths != 0:
             self.averagePathLength /= self.numberOfPaths;
