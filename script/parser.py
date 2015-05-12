@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+# author: wudanzy@csnet1.cs.tsinghua.edu.cn
+# create: Jan 2014
+# update: Apr 2015
+#
+# Calculate the number of ASes with disjoint paths
+# input format: AS number|[AS PATH1]|[AS PATH2]
+# 42492|[24785, 286, 9050, 43899]|[25525, 6453, 31313, 43899]
+#
 import re
 import sys
 import getopt

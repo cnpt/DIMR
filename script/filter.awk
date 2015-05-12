@@ -4,8 +4,8 @@
 # update: Apr 2015
 #
 # Filter the RIB data and get the AS PATH
-# format: AS number [AS PATH1] [AS PATH2]
-# 42492 [24785, 286, 9050, 43899] [25525, 6453, 31313, 43899]
+# format: AS number|[AS PATH1]|[AS PATH2]
+# 42492|[24785, 286, 9050, 43899]|[25525, 6453, 31313, 43899]
 #
 
 function checkPaths(str)
