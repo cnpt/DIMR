@@ -36,11 +36,12 @@ class AS:
         # tmp = str(self.number) + str(self.paths) + str(self.bottelneck) + str(self.hasDisjoint);
         return tmp
 
-    def shortCut(self, paths):
+    def shortCut(self):
         i = 0;
-        j = len(paths)-1;
+        j = len(self.paths)-1;
         while i<j:
-            if paths[i].disjoint(paths[j]):
+            seti = set(self.paths[i][:-1]);
+            if seti.isdisjoint(set(self.paths[j][:-1])):
                 self.hasDisjoint = True;
                 self.disjointPaths = [self.paths[i], self.paths[j]];
                 return True;
@@ -56,6 +57,9 @@ class AS:
         if len(self.paths) < 2:
             self.hasDisjoint = False;
             return;
+
+        if self.numberOfPaths >= 10000:
+            return self.shortCut();
         
         # the algorithm
         allPaths = []; # all paths, each path is presented by a set
@@ -63,8 +67,6 @@ class AS:
         for path in self.paths:
             allPaths.append(set(path[:-1]));
         
-        if self.numberOfPaths >= 10000:
-            return self.shortCut(allPaths);
         # fullPathIdSet = set(range(len(pathList)));
         # initialize the allowedPathIdSets
         for pathId in range(len(allPaths)):
@@ -105,6 +107,8 @@ class AS:
                     # print self.number, "disjoint path", self.paths[pid], self.paths[k];
                     self.hasDisjoint = True;
                     self.disjointPaths = [self.paths[pid], self.paths[k]];
+                    allPaths = None;
+                    allowedPathIdSets = None;
                     return True;
             else:
                 for asn in allowedPathIdSets:
@@ -112,6 +116,8 @@ class AS:
                     allowedPathIdSets[asn].discard(pid)
         # print "no disjoint path"
         self.hasDisjoint = False;
+        allPaths = None;
+        allowedPathIdSets = None;
         return False;
         
     def visit(self):

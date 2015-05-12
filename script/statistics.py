@@ -23,7 +23,9 @@ def calcDisjoint():
         average_length = ''
         for proto in protocols:
             cmd = 'cat ' + BASEDIR + DATADIR + 'msg_' + proto + '_epic' + index + ' | ' + BASEDIR + SHELLDIR;
-            cmd += 'filter.awk | ' + BASEDIR + SHELLDIR + 'parser.py';
+            cmd += 'filter.awk >> ' + BASEDIR + 'tmpfile';
+            os.system(cmd);
+            cmd = BASEDIR + SHELLDIR + 'parser.py ' + BASEDIR + 'tmpfile';
             outcome = os.popen(cmd).readlines()
             disjoint_numbers += outcome[0][:-1] + ' ';
             average_length += outcome[1][:-1] + ' ';
