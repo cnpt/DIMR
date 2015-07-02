@@ -1,5 +1,5 @@
 This project contains three parts:
-1. The original SimBGP is extended to include the implementation of DIMR Router and PDAR Router.
+1. The original SimBGP is extended to include the implementation of DIMR(Disjoint Interdomain Multipath Routing), PDAR(Path Diversity Aware Routing), RBGP(Resilient BGP), YAMR(Yet Another Multipath Routing) and BGPXM(BGP eXtended Multipath). 
 2. A bash script is provided to automatically run the experiment.
 3. Some awk or bash scripts are provided to show the statistics of the data.
 
