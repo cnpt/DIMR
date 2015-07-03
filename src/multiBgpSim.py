@@ -1010,16 +1010,20 @@ class CMIDRRouter(CRouter):
     def getBestDisjointPaths(self, paths):
         if len(paths) < 2:
             return []
-        besti = INFINITE
-        bestj = INFINITE
-        bestv = INFINITE
+        besti = INFINITE    # index of first path
+        bestj = INFINITE    # index of second path
+        bestp = 0           # best value of preference of the combination
+        bestv = INFINITE    # best value of length of combination
         tmp = []
         for i in range(len(paths)-1):
             for j in range(i+1, len(paths)):
+                if paths[i].local_pref + paths[j].local_pref < bestp:
+                    break;
                 if len(paths[i].aspath) + len(paths[j].aspath) >=bestv + 1:
                     continue
                 if self.isTotalDisjoint(paths[i].aspath,paths[j].aspath):
                     bestv = len(paths[i].aspath) + len(paths[j].aspath) - 1
+                    bestp = paths[i].local_pref + paths[j].local_pref
                     besti = i
                     bestj = j
         # for i in range(len(paths)):
@@ -1037,10 +1041,11 @@ class CMIDRRouter(CRouter):
     def getBestSuffixDisjointPaths(self, paths, prefix):
         if len(paths) < 2:
             return []
-        besti = INFINITE
-        bestj = INFINITE
-        bestv = INFINITE
-        bestl = INFINITE
+        besti = INFINITE    # index of first path
+        bestj = INFINITE    # index of second path
+        bestp = 0           # best value of preference
+        bestv = INFINITE    # best value of handle length
+        bestl = INFINITE    # best value of circle length
         bestpeer = None
         tmp = []
         for i in range(len(paths)):
@@ -1050,14 +1055,18 @@ class CMIDRRouter(CRouter):
             # print "rib_in", len(self.peers[peer].rib_in[prefix])
             # print "rib1", self.peers[peer].rib_in[prefix][0]
             
-            if self.peers.has_key(peer) and len(self.peers[peer].rib_in[prefix]) < 2:
+            if not self.peers.has_key(peer) or len(self.peers[peer].rib_in[prefix]) < 2:
                 continue
             # print "rib2", self.peers[peer].rib_in[prefix][1]
-            if paths[i].index == 1:
+            if paths[i].index == 1: # the combination from this peer is already searched
+                continue
+            tmpPreference = self.peers[peer].rib_in[prefix][0].local_pref + self.peers[peer].rib_in[prefix][1].local_pref
+            if tmpPreference < bestp:
                 continue
             tmpcount = self.countingSuffix(self.peers[peer].rib_in[prefix][0].aspath, self.peers[peer].rib_in[prefix][1].aspath) 
             tmplength = len(self.peers[peer].rib_in[prefix][0].aspath)+len(self.peers[peer].rib_in[prefix][1].aspath) - 2*tmpcount -1
-            if tmpcount < bestv:
+            if tmpPreference > bestp or (tmpPreference == bestp and tmpcount < bestv):
+                bestp = tmpPreference
                 bestv = tmpcount
                 bestl = tmplength
                 bestpeer = peer
@@ -1069,39 +1078,7 @@ class CMIDRRouter(CRouter):
 #       else :
 #           print "bestSuffixDisjointPaths none"
         return tmp
-        
     
-    # def getBestCombination(self, paths):
-    #     if len(paths) == 0:
-    #         return []
-    #     bestOne = paths[0];
-    #     bestTwo = None;
-    #     bestSuffixLength = INFINITE;
-    #     bestCircleLength = INFINITE; 
-    #     i = 0; 
-    #     while i < len(paths) - 1 :
-    #         j = i + 1;
-    #         while j < len(paths) :
-    #             if bestSuffixLength == 0 and len(paths[i].aspath)+len(paths[j].aspath) >= bestCircleLength+2:
-    #                 j = j + 1
-    #                 continue
-    #             [tmpSuffixLength, tmpCircleLength] = self.disjointDegree(paths[i], paths[j])
-    #             if (tmpSuffixLength < bestSuffixLength) or (tmpSuffixLength == bestSuffixLength and tmpCircleLength < bestCircleLength) :
-    #                 bestOne = paths[i];
-    #                 bestTwo = paths[j];
-    #                 bestSuffixLength = tmpSuffixLength;
-    #                 bestCircleLength = tmpCircleLength;
-    #             j = j + 1;
-    #         i = i + 1;
-    #     if bestTwo == None:
-    #         return [bestOne];
-    #     else:
-    #         return [bestOne, bestTwo];
-    #
-    # BGP selection process. Return change in best path and changing trend. 
-    # Change = true if best path (or any path in the locrib) changed.  Trend = +1 if new 
-    # best path is better than old one, -1 if the old one was better. 
-    #
 
     #Path selection based on comparison function => TODO : Alternate selection mode
     def pathSelection(self, prefix):
@@ -1353,8 +1330,8 @@ class CPath:
         #    return self.alternative - path2.alternative;
         #if self.weight != path2.weight:
         #    return sgn(path2.weight - self.weight);
-        #if self.local_pref != path2.local_pref:
-        #    return sgn(path2.local_pref - self.local_pref);
+        if self.local_pref != path2.local_pref:
+            return sgn(path2.local_pref - self.local_pref);
         if len(self.aspath) != len(path2.aspath):
             return sgn(len(self.aspath) - len(path2.aspath));
         if len(self.aspath) > 0 and len(path2.aspath) > 0 and (((not bgp_always_compare_med) and self.aspath[0] == path2.aspath[0]) or bgp_always_compare_med) and self.med != path2.med:
