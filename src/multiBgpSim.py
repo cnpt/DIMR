@@ -1105,87 +1105,13 @@ class CMIDRRouter(CRouter):
 
     #Path selection based on comparison function => TODO : Alternate selection mode
     def pathSelection(self, prefix):
-        global backup_routing, ALTERNATIVE_BACKUP;
-        #All the paths under consideration
-        inpaths = [];
-        if self.origin_rib.has_key(prefix):
-            #Adding local path if exists
-            #Caution : If local path exists, this is the only one taken into account - No multipath.
-            #          This is logical, because we are at the origin of the path, there can't be alternate path.
-            inpaths.append(self.origin_rib[prefix]);
-        else:
-            #Getting paths from peers adjribins.  There can be more than one path per peer (multipath)
-            tmppaths = []
-            for peer in self.peers.values():
-                if peer.rib_in.has_key(prefix):
-                    for path in  peer.rib_in[prefix]:
-                        tmppaths.append(path);
-            #Sort paths according to preference
-            tmppaths.sort(self.comparePath);
-            inpaths = self.getBestDisjointPaths(tmppaths)
-            if len(inpaths) == 0:
-                inpaths = self.getBestSuffixDisjointPaths(tmppaths, prefix)
-                if len(inpaths) == 0 and len(tmppaths) > 0:
-                        inpaths.append(tmppaths[0])
-        if backup_routing and self.loc_rib.has_key(prefix) and len(self.loc_rib[prefix]) > 0 and self.loc_rib[prefix][0].alternative == ALTERNATIVE_BACKUP and len(inpaths) > 0 and inpaths[0].alternative == ALTERNATIVE_BACKUP: # and self.loc_rib[prefix][0].weight == inpaths[0].weight:
-            for p in inpaths:
-                if p.compareTo2(self.loc_rib[prefix][0]) == 0:
-                    return [False, 0];
-        #Create locrib entry if it does not exist
-        if not self.loc_rib.has_key(prefix):
-            self.loc_rib[prefix] = [];
-#print "in paths(%s):" %(self.id)
-#        for path in inpaths:
-#            print path;
-        change = False;
-        # tmppaths = self.getBestCombination(inpaths);
-        trend = 0;
-        # pathnum is the max-path-number or inpath-number which is lower
-        # print self.id, "==>", len(inpaths)
-        # for i in range(len(inpaths)):
-        #     print str(inpaths[i])
-        # print "<=="
-        if MAX_PATH_NUMBER > 1:
-            pathnum = MAX_PATH_NUMBER;
-            if pathnum > len(inpaths):
-                pathnum = len(inpaths);
-            i = 0;
-            while i < pathnum or i < len(self.loc_rib[prefix]):
-                #Change the loc_rib if needed
-                #Number of path changed is according to size of loc_rib
-                if i < pathnum and i < len(self.loc_rib[prefix]):
-                    #print pathnum, len(self.loc_rib[prefix]), str(inpaths[i]), str(self.loc_rib[prefix][i]);
-                    if inpaths[i].compareTo2(self.loc_rib[prefix][i]) != 0:
-                        self.loc_rib[prefix][i] = inpaths[i];
-                        change = True;
-                        trend = self.loc_rib[prefix][i].compareTo(inpaths[i]);
-                    i = i + 1;
-                #Less paths in adjribins than in locrib => remove
-                elif i >= pathnum and i < len(self.loc_rib[prefix]):
-                    self.loc_rib[prefix].pop(i);
-                    change = True;
-                    trend = -1;
-                #More paths available than previously
-                elif i < pathnum and i >= len(self.loc_rib[prefix]):
-                    self.loc_rib[prefix].append(inpaths[i]);
-                    i = i + 1;
-                    change = True;
-                    trend = 1;
-        else: #One best path per prefix
-            if len(self.loc_rib[prefix]) == 0 and len(inpaths) > 0:
-                self.loc_rib[prefix].append(inpaths[0]);
-                trend = 1;
-                change = True;
-            elif len(self.loc_rib[prefix]) > 0 and len(inpaths) == 0:
-                del self.loc_rib[prefix][0];
-                trend = -1;
-                change = True;
-            elif len(self.loc_rib[prefix]) > 0 and len(inpaths) > 0 and self.loc_rib[prefix][0].compareTo2(inpaths[0]) != 0:
-                trend = self.loc_rib[prefix][0].compareTo(inpaths[0]);
-                del self.loc_rib[prefix][0];
-                self.loc_rib[prefix].append(inpaths[0]);
-                change = True;
-        return [change, trend];
+        tmppaths = self.selectPaths(prefix);
+        inpaths = self.getBestDisjointPaths(tmppaths)
+        if len(inpaths) == 0:
+            inpaths = self.getBestSuffixDisjointPaths(tmppaths, prefix)
+            if len(inpaths) == 0 and len(tmppaths) > 0:
+                    inpaths.append(tmppaths[0])
+        return self.selectionChanged(prefix, inpaths);
     
 ############################################################################################################################
 #                                     Class CBGPXMRouter - Represents a BGP-XM router
